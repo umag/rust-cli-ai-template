@@ -1,0 +1,10 @@
+[package]
+name = "{{project-name}}"
+version = "0.1.0"
+edition = "2024"
+authors = ["{{author_name}} <{{email}}>"]
+
+[dependencies]
+
+[dev-dependencies]
+cargo-nextest = "0.9.111"
