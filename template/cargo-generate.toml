@@ -3,8 +3,8 @@ authors = ["{{author_name}} <{{email}}>"]
 description = "A template for creating a new Rust project"
 keywords = ["rust", "project", "template"]
 categories = ["command-line-utilities"]
+exclude = ["spec/*"]
 
 [placeholders]
-project-name = { type = "string", prompt = "Project name" }
 author_name = { type = "string", prompt = "Your name" }
 email = { type = "string", prompt = "Your email address" }

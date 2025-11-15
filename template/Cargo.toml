@@ -8,3 +8,4 @@ authors = ["{{author_name}} <{{email}}>"]
 
 [dev-dependencies]
 cargo-nextest = "0.9.111"
+proptest = "1.9.0"
