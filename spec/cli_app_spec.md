@@ -2569,3 +2569,504 @@ crates is the [lib.rs](https://lib.rs) crate index, including:
 Other resources:
 - [Rust Cookbook](https://rust-lang-nursery.github.io/rust-cookbook/)
 - [rosetta-rs](https://github.com/rosetta-rs)
+# Rain's Rust CLI recommendations
+
+This living document comprises [my](https://github.com/sunshowers) [recommendations](https://rust-cli-recommendations.sunshowers.io)
+for how to organize and manage Rust CLI applications.
+
+In this document, I cover some tips and best practices for writing Rust applications, informed
+[by my experience](https://sunshowers.io/work/#open-source-projects) writing real-world Rust tools. I've focused on command-line tools here, but many of the suggestions can be generalized to graphical and server applications as well. I hope you find them useful for your own applications.
+
+If you haven't gone through the [Rust CLI Book](https://rust-cli.github.io/book/index.html) yet, I'd recommend reading it first. That book provides a lot of useful information about how to write command-line apps in Rust. This document covers some more advanced material and is more opinionated overall.
+
+## Locations
+
+This document is hosted online at [https://rust-cli-recommendations.sunshowers.io](https://rust-cli-recommendations.sunshowers.io). The source is hosted [on GitHub](https://github.com/sunshowers-code/rust-cli-recommendations).
+
+This document is available offline by installing `git` and running the following command while online.
+
+```sh
+git clone https://github.com/sunshowers-code/rust-cli-recommendations --branch gh-pages
+```
+
+then pointing your web browser at `rust-cli-recommendations/index.html`.
+
+Pull requests to fix typos or unclear language are welcome! If you have a suggestion for a change to the document, please [search through the issues] to see if it's been discussed already. If not, please [open an issue].
+
+[search through the issues]: https://github.com/sunshowers-code/rust-cli-recommendations/issues?q=is%3Aissue+sort%3Aupdated-desc
+[open an issue]: https://github.com/sunshowers-code/rust-cli-recommendations/issues/new
+
+> Tip: While reading the book, you can hit the edit button <i class="fa fa-edit"></i> in the top right corner to make a quick change to it.
+
+## License
+
+This document, other than inline code snippets, is licensed under [CC BY 4.0]. This means that you are welcome to share, adapt or modify this material as long as you give appropriate credit.
+
+Code snippets included in this document are licensed under [CC0 1.0]. The author(s) have waived all of their rights to the work worldwide under copyright law, to the extent allowed by law.
+
+[CC BY 4.0]: https://creativecommons.org/licenses/by/4.0/
+[CC0 1.0]: https://creativecommons.org/publicdomain/zero/1.0/
+# Picking an argument parser
+
+When you're writing a Rust command-line application, one of the first things you'll have to do is to figure out how to parse command-line inputs.
+There are a number of different command-line parsers for Rust programs. However, projects *should* use [**clap**](https://crates.io/crates/clap).
+
+**Why?**
+
+* clap is actively maintained: as of January 2022, clap just came out with a [v3 release]().
+* clap is the most popular command-line parsing library for Rust, which means that there's an existing ecosystem of projects around clap.
+* clap comes with a number of extra features, such as suggestions based on [Jaro–Winkler distance](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance) and full configurability of [commands](https://docs.rs/clap/latest/clap/enum.AppSettings.html) and [arguments](https://docs.rs/clap/latest/clap/enum.ArgSettings.html).
+* There are a number of standard conventions for Unix CLIs: see [this comment](https://github.com/google/argh/issues/3#issuecomment-581144181) by [Stephen Sokolow](https://github.com/ssokolow). clap supports all of them. Another actively maintained project, [argh](https://github.com/google/argh), does not target Unix platforms and so does not support all of these conventions.
+
+**Reasons against using clap**
+
+* clap pulls in several dependencies and takes quite a while to build.
+* clap increases binary size significantly.
+* clap is a complex parser with many different options. I've found uses for most of them, but they can be overwhelming.
+* clap version 3 currently has a Minimum Supported Rust Version (MSRV) of Rust 1.54; I personally do not consider this to be a negative but there's [some discussions about it](https://github.com/clap-rs/clap/issues/3267). For now, a workaround is to use version 2 of clap, which supports most of the features that clap version 3 does.
+
+## Automatically deriving arguments
+
+Projects *may* turn on the `derive` feature in clap and use a declarative model to define command-line arguments. (The `derive` feature is new to v3---users of clap v2 can use [structopt](https://crates.io/crates/structopt), which `clap_derive` is based on.)
+
+For example:
+
+```rust,noplaypen
+{{#rustdoc_include ../code/cli-parser/src/bin/grep-app.rs:definition}}
+```
+
+The doc comments are processed as help text by clap. Here's what the help text looks like:
+
+```rust,noplaypen
+{{#rustdoc_include ../code/cli-parser/src/bin/grep-app.rs:grep-help}}
+```
+
+**Why?**
+
+* Derive-style arguments are significantly easier to read, write, and modify.
+* Derive-style components can be written once, and reused across multiple commands.
+
+**Why not?**
+
+* The derive macro is an optional feature that pulls in extra dependencies and increases build times.
+* The derive macro can be a bit magical. Looking at [the source code of clap_derive](https://github.com/clap-rs/clap/blob/master/clap_derive/src/lib.rs), or the generated output with [cargo-expand](https://crates.io/crates/cargo-expand), may be useful.
+* The derive macro is less flexible than the builder API. For example, for an argument used multiple times like `-v -v -v`, the builder API can tell you exactly which position each `-v` was used in. The derive macro can only tell you how many times `-v` was used.
+
+> Tip: With clap 3, it is possible to combine the builder and derive approaches. For example, [`clap::Args::augment_args_for_update`](https://docs.rs/clap/3/clap/trait.Args.html#tymethod.augment_args_for_update) can be used to flatten a derived list of arguments into a builder-based `App`.
+
+## Command and argument case
+
+Following Unix and GNU conventions, all commands and arguments, except for short arguments, *must* be in [kebab case](https://en.wikipedia.org/wiki/Kebab_case). This means that:
+
+* Commands and arguments *must* be in lowercase.
+* Multiple words *must* be separated by hyphens: `--example-opt`, not `--example_opt` or `--exampleOpt`.
+
+`clap`'s derive feature and `structopt` use kebab case by default. If you have an existing command that doesn't follow these rules, you can maintain compatibility by renaming it to the kebab-cased version and retaining the old case as an alias.
+
+## Alternatives to clap
+
+* [argh](https://github.com/google/argh): Actively maintained, and has an explicit goal of being low-overhead at runtime. However, it [follows Fuchsia OS conventions](https://github.com/google/argh/issues/3#issuecomment-581144934) rather than Unix ones, so it's missing several crucial features from a Unix perspective.
+* [pico-args](https://github.com/RazrFalcon/pico-args): Zero dependencies, quick to compile, and negligible impact on binary size. Does not include help generation, derive support, or as many config flags as clap. A great choice for really simple applications.
+* [gumdrop](https://crates.io/crates/gumdrop): a simple argument parser with derive support. Somewhat less popular than clap, and doesn't support deserializing directly to domain types (clap [does](https://github.com/clap-rs/clap/blob/v3.0.6/examples/derive_ref/README.md#arg-types)).
+
+For a comparison of binary size overhead and build times between these parsers and more, see [these benchmarks](https://github.com/rust-cli/argparse-benchmarks-rs).
+
+## Writing your own parser by hand
+
+You *should not* write your own parser completely by hand. Instead, most cases are better served by a simple parser like [pico-args](https://github.com/RazrFalcon/pico-args).
+
+If you must write a parser by hand, consider basing it on the [lexopt](https://docs.rs/lexopt/latest/lexopt/) lexer. Be sure to handle all the [standard conventions for Unix CLIs](https://github.com/google/argh/issues/3#issuecomment-581144181).
+# Handling arguments and subcommands
+
+For a program that has subcommands, the following code structure is *recommended*.
+
+```rust,noplaypen
+{{#rustdoc_include ../code/cli-parser/src/bin/handling-arguments.rs:definition}}
+```
+
+Notes:
+
+* **Only the top-level `App` is public.**
+* **`App` is a struct, one level above the command enum.**
+  * While it is possible to make `App` an enum with all the subcommands, in my experience this design has always come back to bite me. This has always been because I've wanted to introduce global options later.
+* **Liberal use of `#[clap(flatten)]`.**
+  * This option flattens inline options from a struct into the parent struct or enum variant, or from an enum into a parent enum.
+  * This helps break up long series of options into smaller, reusable components that can be more easily processed in different sections of the project's code. For example, `Color` can be further nested into an `OutputOpts` struct, defined in a separate `output.rs` file.
+  * It also helps code pass a complex set of arguments around as a single parameter, rather than having to add a parameter everywhere.
+* **Global options are marked with `#[clap(global = true)]`.**
+  * This means that global options like `--color` can be used anywhere in the command line.
+* **Use of `ArgEnum`.**
+  * `ArgEnum` simplifies the definition of arguments that take one of a limited number of values.
+
+---
+
+The top-level help message is:
+
+```rust,noplaypen
+{{#rustdoc_include ../code/cli-parser/src/bin/handling-arguments.rs:top-level-help}}
+```
+
+The help for the read command is:
+
+```rust,noplaypen
+{{#rustdoc_include ../code/cli-parser/src/bin/handling-arguments.rs:read-help}}
+```
+# Binaries vs libraries
+
+You *may* expose your application's functionality as a library. Some binaries are simple and don't necessarily need to expose their functionality as a library. Other binaries are more complex, in which case their functionality can be exposed as a library that others can build upon.
+
+**Why separate libraries from binaries?**
+
+* For other consumers of the library, clap and other binary-only dependencies are unnecessary.
+* The binary's versioning is separated out from the library's versioning; see [Versioning](versioning.html) for more.
+
+**Reasons against exposing a library**
+
+* Maintaining a library in addition to a binary is hard work. It involves documentation and versioning.
+* In some cases, maintainers can decide to expose their functionality *only* as a binary to force a looser coupling with downstream consumers.
+  * *Case study:* The presence of the [libgit2](https://libgit2.org/) and [JGit](https://www.eclipse.org/jgit/) libraries for Git has made it significantly harder to improve Git's data structures. These libraries are tightly coupled to their consumers, which in practice means that Git improvements are tied to the release schedules of commercial projects like Xcode and Visual Studio.
+  * Cargo and rustc are not designed to be invoked as libraries. They force loose coupling.
+
+## If you've decided to make a library
+
+> Note: In this section, "package" means all code scoped to a single `Cargo.toml` file.
+
+If your code is meant to be uploaded to a registry like crates.io:
+
+* Binary packages *must not* expose their library functionality within the same package.
+* The library package *must* be separated out, with an appropriate name linking the two.
+
+If your code is internal to the workspace:
+
+* Binary packages *should not* expose a library within the same package.
+* The library package *should* be separated out, with an appropriate name linking the two.
+
+Some examples of linked names:
+
+* *my-lib* for the library, and *my-lib-cli* for the binary, if most people are going to use the library.
+* *my-app-core* for the library, and *my-app* for the binary, if most people are going to use the binary.
+* *my-utility* for the library, and *cargo-my-utility* for the binary, if your program is a Cargo plugin.
+
+There's an intermediate solution possible here, which is to have a single crate that enables being built as a binary with `--features=bin`. However, you *must not* do this for code uploaded to a registry, because you lose out on the benefits of having separate versioning. You *may* use this pattern for code internal to a workspace.
+# Machine-readable output
+
+Applications *may* (and in the case of forced loose coupling, *should*) make their CLI available as an interface not just to humans but to other programs. If you're making your interface available this way, follow these rules:
+
+**For lists of strings, programs *should* provide list output as newline-delimited items.**
+
+* This is most useful for compatibility with existing tools like `xargs`.
+* If list items are filenames or can have newlines or other in them, programs *must* provide a `-0` flag or similar to list output as null-delimited (`\0`-delimited) items. Almost all standard Unix commands understand null-delimited output (e.g. `xargs --null`).
+
+**For more complex structured data, programs *should* accept a flag to provide output (e.g. `--output-format`, or `--message-format` if many lines of structured data are printed out).**
+
+* Programs *should* support at least `json` machine-readable output.
+* Programs *may* also provide their output as XML, [CBOR](https://cbor.io/), [MessagePack](https://msgpack.org/index.html), or other **self-describing** formats.
+  * A self-describing format is one where the keys, or some equivalent, are part of the serialized output.
+* Formats like [protobuf](https://developers.google.com/protocol-buffers) are suitable as well, if up-to-date IDLs (e.g. `.proto` files) are published along with releases. One neat trick is to embed them into your binary and add a command to write them out to a given directory.
+* If many lines of structured data are incrementally printed out, prefer a format like [newline-delimited JSON](http://ndjson.org/). This is the format used by Cargo's `--message-format json` option.
+
+**Programs *must not* provide their output as [bincode](https://github.com/bincode-org/bincode) or other non-self-describing formats.** These formats are unsuitable for interoperability, where stability is paramount.
+
+**All machine-readable output *must* be printed to stdout, *not* stderr.**
+
+**Colors *must* be disabled for machine-readable output.**
+
+**Within a binary version series, output *must* be kept stable and append-only.** Breaking changes *must* be gated to an argument (e.g. `--format-version 2` or `--message-format json-v2`). Adding new keys to a JSON map or equivalent is generally considered stable.
+# Organizing code in binary crates
+
+Within a binary crate, here's the organization that's *recommended*.
+
+`my-app/src/command.rs`:
+
+```rust
+{{#rustdoc_include ../code/organizing-binary/src/command.rs}}
+```
+
+`my-app/src/lib.rs`:
+
+```rust
+{{#rustdoc_include ../code/organizing-binary/src/lib.rs}}
+```
+
+`my-app/src/bin/my-app.rs`:
+
+```rust
+{{#rustdoc_include ../code/organizing-binary/src/bin/my-app.rs}}
+```
+
+Notes:
+
+* **Most of the logic is within `command.rs`.**
+  * In general, you *should* keep lib.rs as minimal as possible, unless your entire library fits in it. That's
+    because all methods and fields in `lib.rs` are visible to the entire library---code in the top-level module
+    cannot be marked private to the rest of the module.
+* **There's a `lib.rs` separate from the `my-app.rs` that contains `main`.**
+  * There are several advantages to having a `lib.rs`. In particular, `rustdoc` doesn't use standard privacy rules if building documentation from `main.rs`, so private modules are visible in the public documentation.
+* **Only the top-level `MyApp` is exported.**
+  * The top-level `MyApp` is all `main.rs` should generally need to care about.
+* **`MyApp` is marked `#[doc(hidden)]`.**
+  * The details of `MyApp` are only meant to be seen by `main`. The library is not part of the public API. Only
+  the command-line interface is.
+* **`src/bin/my-app.rs` instead of `src/main.rs`.**
+  * While `src/main.rs` works just as well, `src/bin` makes it harder to accidentally import library code with `mod` statements.
+# Versioning
+
+A library crate, if provided, *should* follow [the usual Rust library versioning rules](https://doc.rust-lang.org/cargo/reference/semver.html).
+
+A binary crate *should* define its public API as consisting of the command-line interface, plus anything else related to the interface that the project's maintainers wish to keep stable.
+
+* This means that major version changes happen when there are breaking changes to the CLI, not to internal or library code.
+* For example, [cargo-hakari's stability policy](https://docs.rs/cargo-hakari/latest/cargo_hakari/#stability-guarantees) is to keep the contents of a generated checked-in file the same, unless a config option is turned on or there's a bugfix.
+
+**Why?** It is easier to avoid making breaking changes to command-line interfaces. Mature projects like [GNU coreutils](https://www.gnu.org/software/coreutils/) avoid breaking changes to their CLIs for decades.
+
+## Tips to avoid breaking changes
+
+* Make experimental commands available via an environment variable or some other gating mechanism to gather feedback, with a warning that the behavior of these can change at any time.
+* Mark old commands or arguments deprecated, and possibly hide them from help text. Continue to preserve their behavior.
+* If the program persists data on disk, make it possible to do forward transitions but not backward ones. Add a *format version* to persisted data and increment it every time the data format changes. If an old version of the program reads a format version it does not understand, error out gracefully.
+
+> Tip: If you're using GitHub Actions for CI, use the [baptiste0928/cargo-install](https://github.com/baptiste0928/cargo-install) action to install a binary from crates.io, using a cached version if possible. This action lets you specify a version range, which works well with the binary versioning policy above.
+# Adding colors to applications
+
+Colors and styles can make your command-line applications look nice, and also make output easier to understand by leveraging human pattern recognition. However, adding them requires a significant amount of care.
+
+## General recommendations
+
+These rules apply to all command-line programs, not just Rust ones.
+
+1. Applications *should* have a global `--color` option, with the values `always`, `auto` (default) and `never`. If this is specified as `always` or `never`, applications *must* enable or disable colors respectively.
+2. Otherwise, if one of a number of environment variables is specified, applications *should* do what it says.[^color]
+3. Otherwise, if the output stream (stdout or stderr) is a pipe, applications *must* disable colors. (Each output stream *must* be evaluated separately. For example, if stdout is a pipe but stderr isn't, applications *must* disable colors on stdout but *may* enable them on stderr.)
+4. Otherwise, applications *may* enable colors.
+
+2 and 3 are covered by the [supports-color](https://docs.rs/supports-color/latest/supports_color/) Rust library. The exact set of environment variables is too complicated to describe here. See [the source code of supports-color](https://docs.rs/supports-color/latest/src/supports_color/lib.rs.html) for a full list.
+
+**It *must* be possible to disable colors.** Some users's terminals may have broken color support; in other cases, pipe detection may not work as expected.
+
+[^color]: This recommendation is somewhat controversial. See [this discussion](https://github.com/rust-lang/rust/pull/27867) in the Rust repository for more about this. I generally believe that using environment variables is OK in any output that's not designed to be machine readable.
+
+## Color palettes
+
+Terminals may support one of three color palettes:
+
+* *16 colors:* 4-bit color; black, red, green, yellow, blue, magenta, cyan, white, and a "bright" version of each.
+* *256 colors:* 8-bit color; the 16 colors above, a 6×6×6 cube for each of red, green and blue, and 24 grayscale tones. [This page by Pádraig Brady](http://www.pixelbeat.org/docs/terminal_colours/#256) has more information about them.
+* *Truecolor (16 million colors):* 24-bit color; 8 bits for each of red, green and blue. This is the standard that web pages and most monitors support. You may have seen these colors written as e.g. <span style="color:#9b4fd1">#9b4fd1</span>.
+
+**The default color schemes in applications *must* be restricted to 12 colors: red, green, yellow, blue, magenta, cyan, and the bright versions of each of these.**
+
+* While the wider palettes are useful for terminal theming controlled by the user, applications *must not* use them by default. The reason is that users may be using a variety of terminal themes with different backgrounds. **Truecolors and 8-bit colors will not render properly with all terminal themes.** Light-colored text will fade into a light background, and dark-colored text will fade into a dark background.
+* Most terminals allow you to configure these colors to whatever one pleases. In most themes, these 12 colors are set to contrast with the background.
+<tt><span style="color: #acacab; background-color:#050505">Themes with dark backgrounds <span style="color: #a9cdeb">set "blue" to be lighter</span></span></tt>,
+while <tt><span style="color: #0e0101; background-color:#ffffdd">themes with light backgrounds <span style="color: #3465a4">set "blue" to be darker</span></span></tt>. (These examples are from real themes.)
+* The "black" and "white" colors generally *do not* contrast with the background.
+
+**Applications *may* allow users to set their own color schemes.** If users can set their own color schemes, like [ls](https://man7.org/linux/man-pages/man5/dir_colors.5.html), [emacs](https://www.gnu.org/software/emacs/manual/html_node/emacs/Colors.html) or [vim](https://vimhelp.org/usr_06.txt.html) do, wider palettes of colors be supported. In these cases, users can match their color schemes with their terminal themes.
+
+## Styles
+
+Terminals use the same escape codes to support both colors and styles---bold, italic, etc.
+
+**Applications *may* use bold text.** Almost all terminals support **bold text**. Some terminals do not support *italic text* or ~~strikethroughs~~: you can use them in your applications, but relying on them can cause issues.
+
+**Applications *must not* use blinking text.** Blinking text can be distracting or difficult to read for many people. The HTML `<blink>` tag, which had similar behavior, was [removed from web pages](https://www.fastcompany.com/3015408/saying-goodbye-to-the-html-tag) around 2013.
+
+> TODO: add information about ASCII and Unicode symbols (including emoji) that are safe to use in terminals.
+
+## ANSI color codes and Windows color APIs
+
+Most Unix terminals support [ANSI color codes](https://en.wikipedia.org/wiki/ANSI_escape_code#Colors). For example, turning the foreground color to "green" involves writing the characters `\x1b` (ESC), `[`, `32` (for green), and `m` to the terminal.
+
+Historically, Windows provided a set of [Console APIs](https://docs.microsoft.com/en-us/windows/console/console-screen-buffers#character-attributes) for the same purpose. These APIs have [since been deprecated](https://docs.microsoft.com/en-us/windows/console/classic-vs-vt), and Windows now supports the same ANSI color codes other platforms do.
+
+**Cross-platform applications *should not* target the Windows Console APIs.** Instead, they should rely on the ANSI color code support built into modern Windows terminals. Note that Windows requires ANSI color code support to be initialized: the [enable-ansi-support](https://github.com/sunshowers/enable-ansi-support) crate does that for you if you're using Rust. Call it early in `main`.
+# Managing colors in Rust
+
+There are many Rust libraries for managing terminal colors. You *should* use [owo-colors](https://crates.io/crates/owo-colors) because it is the only library I've found that meets all of these criteria:
+
+* actively maintained
+* has a simple, intuitive API
+* minimizes dependencies on global state
+* involves zero allocations
+
+> Note: you *should not* use [termcolor](https://docs.rs/termcolor/latest/termcolor/) because it targets the deprecated Console APIs on Windows—and has a significantly more complicated API as a result.
+>
+> Instead, you *should* use a library that just only supports ANSI color codes, and initialize support for them on Windows with [enable-ansi-support](https://crates.io/crates/enable-ansi-support).
+
+There are two general ways with which color support can be handled. I'm going to call them the "immediate pattern" and the "stylesheet approach", respectively. **Library code that supports colors *should* use the stylesheet approach.** Code in a binary crate can use whichever pattern leads to simpler code.
+
+## The immediate pattern
+
+This pattern is usually presented in examples and tutorials. It is conceptually quite simple.
+
+Here's an example of what it looks like:
+
+```rust,noplaypen
+{{#rustdoc_include ../code/managing-colors/src/bin/immediate.rs:immediate}}
+```
+
+Notes:
+
+* **`owo_colors::set_override` is used to control color support globally.** The global configuration only has an effect if `if_supports_color` is called.
+* **`println!` is paired with `Stream::Stdout`.** If this were `eprintln!`, it would need to be paired with `Stream::Stderr`.
+
+While this pattern is sometimes convenient in binary code, **it *should not* be used in libraries.** That is because libraries *should not* print information directly out to stdout or stderr—instead, they should return values that implement `Display` or similar. Library code *should* use the stylesheet approach instead.
+
+## The stylesheet approach
+
+This pattern involves defining a `Styles` struct containing colors and styles to apply to a text.
+
+A stylesheet is simply a list of dynamic styles, customized to a particular type to be displayed. Here's an example:
+
+```rust,noplaypen
+{{#rustdoc_include ../code/managing-colors/src/lib.rs:stylesheet}}
+```
+
+Here's some library code that uses the above stylesheet:
+
+```rust,noplaypen
+{{#rustdoc_include ../code/managing-colors/src/lib.rs:my_value}}
+```
+
+And finally, here's the binary code that uses the library.
+
+```rust,noplaypen
+{{#rustdoc_include ../code/managing-colors/src/bin/stylesheet.rs:stylesheet}}
+```
+
+Notes:
+
+* **Library code is completely unaware of whether the environment supports colors.** All it cares about is whether the `colorize` method is called.
+  * Note that the global `set_override` and `unset_override` methods have no impact on library code in the stylesheet example.
+  * The global methods are only active if `if_supports_color` is called, as shown by the example for [the immediate pattern] above. This is by design: most libraries shouldn't reach out to global state.
+* **The stylesheet is stored as `Box<Styles>`.** The boxing isn't strictly required, but each `Style` is pretty large, and a struct containing e.g. 16 styles is 272 bytes as of owo-colors 3.2.0. That's a pretty large amount of data to store on the stack.
+* **`Styles::default()` initializes all the styles to having no effect.** The `colorize()` method then initializes them as required.
+* **For custom color support, `Styles` can be made public.** Most library code won't need to give users the ability to customize styles, but this pattern naturally extends to that use case.
+* **Use of a separate `MyAppDisplay` type.** The `colorize` call is isolated to this particular `MyAppDisplay`, without influencing other display calls.
+* **`println!` is paired with `Stream::Stdout`.** If this were `eprintln!`, it would need to be paired with `Stream::Stderr`.
+
+[the immediate pattern]: #the-immediate-pattern
+# Configuration
+
+Simple applications are able to accept all their options over the command line, but more complex ones eventually need to add support for configuration files.
+
+## Configuration formats
+
+**Configuration *should* be in the [TOML format](https://toml.io/en/).** The TOML format, as a descendant of INI, is widely understood and is easy to read and write for both humans and computers.
+
+[YAML](https://yaml.org/) *may* be used if the configuration is complex enough (though in these cases it's often fruitful to devise ways of reducing complexity), or if there are legacy constraints.
+
+Some utilities require more expressive power in their configuration; for example, [wezterm](https://wezfurlong.org/wezterm/) uses [Lua](https://wezfurlong.org/wezterm/config/files.html), while [Bazel](https://bazel.build/) uses a custom configuration language inspired by Python called [Starlark](https://docs.bazel.build/versions/main/skylark/language.html).
+
+## Configuration scopes
+
+Depending on the application, the following scopes for a configuration are often seen in practice:
+
+1. *Directory-scoped.* Applies to a directory and its subdirectories. Controlled by a file somewhere in this directory or a parent. For example, [`.gitignore`](https://git-scm.com/docs/gitignore) is directory-scoped.
+2. *Repository-scoped.* Applies to a repository: controlled by a file somewhere in a code repository. For example, [`clippy.toml`](https://github.com/rust-lang/rust-clippy#configuration) is repository-scoped.
+3. *User-scoped.* A file somewhere in the user's home directory.
+4. *System-wide.* A file somewhere in a central location on the computer.
+
+Not all applications support all of these: which scopes make sense is a matter of judgment and thinking about use cases. Some server-side applications support fetching configuration from a remote server; they are out of scope here.
+
+**If applications support repository-scoped configuration:**
+
+* Applications *should* put repository-scoped configuration in a `.config` directory under the repository root. Typically, applications place their configuration at the top level of the repository. However, too many config files at the top level can pollute directory listings.
+* Applications *should* allow both local and checked-in configuration files. For example, an application `myapp` should support configuration in both `.config/myapp.toml` and `.config/myapp.local.toml`. Entries in `./config/myapp.local.toml` *must* override those in `.config/myapp.toml`.
+
+**If applications support user-scoped configuration:**
+
+* On Unix platforms other than macOS, applications *should* follow the [XDG specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html).
+* On macOS and Windows, applications *should* either use `$HOME/.config` or the platform-native config directory. On macOS and Windows, the platform-native directories are somewhat harder to access on the command line, so `$HOME/.config` is a suitable alternative.
+
+[dirs](https://crates.io/crates/dirs) is the most actively maintained Rust library for getting the native config directory (and other directories) for every platform.
+
+**Applications *may* read configuration options over the command line and the environment.** It is often reasonable to let users override configuration via command-line options and environment variables. If so, then:
+
+* Environment variables *must* be prefixed with a unique identifier based on the app. For example, an app called `myapp` can support a "limit" configuration through a `MYAPP_LIMIT` variable.
+* Environment variables *should* also be supported as command-line options. For example, `myapp --limit`. Command-line options are more discoverable than environment variables. If you actually *want* your options to be less discoverable, for example if exposing them would increase support load, you can add hidden command-line options.
+* Command-line arguments *must* override environment variables. An environment variable can be set further up in the environment. A command-line argument expresses user intent most directly.
+# Hierarchical configuration
+
+**Applications *should* follow a hierarchical configuration structure.** Use the following order, from highest priority to lowest.
+
+1. Command-line arguments
+2. Environment variables
+3. Directory or repository-scoped configuration
+4. User-scoped configuration
+5. System-wide configuration
+6. Default configuration shipped with the program.
+
+> Tip: One neat trick is to embed your app's default configuration [as a config file](https://doc.rust-lang.org/std/macro.include_str.html) within your binary. The default configuration can serve as an example to other users.
+
+There are some exceptions. For example, color support *should* follow the rules listed in the [Colors](./colors.md) section.
+
+**Configurations *may* be merged rather than completely overwritten.** Consider the following configuration files.
+
+```toml
+# $HOME/.config/myapp.toml -- user-scoped config
+limit = 42
+
+[encoding]
+input = "utf16"
+output = "latin1"
+```
+
+```toml
+# <repository>/.config/myapp.toml -- repository-scoped config
+limit = 84
+
+[encoding]
+input = "utf8"
+```
+
+One way to merge configurations is to combine them, as follows:
+
+```toml
+limit = 84
+
+[encoding]
+input = "utf8"
+output = "latin1"
+```
+
+Exactly how deep merges should go is application-specific.
+
+## Rust libraries for managing configuration
+
+There are two main Rust libraries for managing hierarchical configuration:
+
+* [config](https://crates.io/crates/config). I've used this for my own projects.
+* [figment](https://crates.io/crates/figment). Seems high quality, though I haven't used it.
+
+These configuration libraries can be used in combination with serde, so that you can manage hierarchies and merges with dynamically typed variables at the edges of your program, then switch over to well-typed serde structures for validating the config's schema. For how to do this with config, [see this example].
+
+[see this example]: https://github.com/mehcode/config-rs/blob/53e43fbcf96b5c2a661d052a6e3d55fc3709f1e1/examples/hierarchical-env/settings.rs
+# Key words
+
+The key words *must*, *must not*, *required*, *should*, *should not*,
+*recommended*, *may*, and *optional*, derive their meanings from
+[RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119), but have
+somewhat different connotations because this is a list of recommendations
+and not a standard.
+
+* *must*, *must not* and *required* mean that an application that doesn't follow this recommendation is *incorrect* and has a bug that needs to be fixed.
+* *should*, *should not* and *recommended* mean that most applications should follow this recommendation, but there are valid reasons not to.
+* *may* and *optional* mean that programs are free to follow this recommendation or ignore it; there are valid reasons in either direction.
+# Acknowledgments
+
+Thanks to the following reviewers who read through drafts of this document and provided invaluable feedback:
+
+- Ana Hobden ([Twitter](https://twitter.com/a_hoverbear), [GitHub](https://github.com/hoverbear))
+- Brandon Williams ([Twitter](https://twitter.com/bmwill_), [GitHub](https://github.com/bmwill))
+- Ed Page ([GitHub](https://github.com/epage))
+- Inanna Malick ([Twitter](https://twitter.com/inanna_malick/), [GitHub](https://github.com/inanna-malick))
+- jam1garner ([Twitter](https://twitter.com/jam1garner), [GitHub](https://github.com/jam1garner))
+- Jane Lusby ([Twitter](https://twitter.com/yaahc_), [GitHub](https://github.com/yaahc))
+- Manish Goregaokar ([Twitter](https://twitter.com/ManishEarth), [GitHub](https://github.com/Manishearth))
+# Changelog
+
+This page will document significant changes or additions to advice. For the full changelog, see [the list of commits on GitHub](https://github.com/sunshowers-code/rust-cli-recommendations/commits/main).
+
+**2022-01-21:** Initial public version.
