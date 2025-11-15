@@ -28,3 +28,15 @@ cargo generate --git https://github.com/umag/rust-cli-ai-template.git --name my-
 
 This will create a new directory named `my-cli-app` with the template's
 contents.
+
+## Specifications and Testing
+
+The specifications and testing methodologies used in this template are based on
+the following resources:
+
+- [The Rust CLI Book](https://rust-cli.github.io/book/index.html)
+- [Rust CLI Recommendations](https://rust-cli-recommendations.sunshowers.io/index.html)
+- [Monads through PBT](https://sunshowers.io/posts/monads-through-pbt/)
+
+Licensed under
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
