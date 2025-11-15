@@ -30,7 +30,7 @@ cargo nextest run
 
 ## Version Control with Jujutsu (jj)
 
-This project uses [Jujutsu (jj)](https://github.com/martinvonz/jj) for version
+This project uses [Jujutsu (jj)](https://github.com/jj-vcs/jj) for version
 control. Here are some common commands:
 
 - **Snapshot changes**: `jj log --no-pager`
@@ -41,7 +41,7 @@ control. Here are some common commands:
 ## Issue Tracking with Beads (bd)
 
 All issue tracking is handled by
-[beads (bd)](https://github.com/boxofrad/beads).
+[beads (bd)](https://github.com/steveyegge/beads).
 
 - **Check for ready work**: `bd ready --json`
 - **Create a new issue**:
