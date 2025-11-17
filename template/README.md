@@ -57,6 +57,7 @@ the following resources:
 
 - [The Rust CLI Book](https://rust-cli.github.io/book/index.html)
 - [Rust CLI Recommendations](https://rust-cli-recommendations.sunshowers.io/index.html)
+- [Rust Hierarchical Configuration](https://steezeburger.com/2023/03/rust-hierarchical-configuration/)
 - [Monads through PBT](https://sunshowers.io/posts/monads-through-pbt/)
 
 Licensed under
