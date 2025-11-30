@@ -59,6 +59,7 @@ the following resources:
 - [Rust CLI Recommendations](https://rust-cli-recommendations.sunshowers.io/index.html)
 - [Rust Hierarchical Configuration](https://steezeburger.com/2023/03/rust-hierarchical-configuration/)
 - [Monads through PBT](https://sunshowers.io/posts/monads-through-pbt/)
+- [Beyond Ctrl-C: The dark corners of Unix signal handling](https://sunshowers.io/posts/beyond-ctrl-c-signals/)
 
 Licensed under
 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
